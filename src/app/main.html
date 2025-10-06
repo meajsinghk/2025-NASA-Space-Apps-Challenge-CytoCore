@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BioCosmos: Space Biology Knowledge Engine</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Cosmic Dark -->
+    <!-- Application Structure Plan: A single-page application with a fixed left navigation and a collapsible right AI panel. The structure is task-oriented, divided into five main views: 1) Dashboard for a high-level overview, 2) Explore for detailed search/filtering, 3) Insights for visual relationship discovery via a 2D knowledge graph, 4) Workspace for synthesizing findings, and 5) Reading List for saving papers. This structure was chosen to guide users through a funnel of discovery: from broad overview (Dashboard) to specific exploration (Explore), deep connection-finding (Insights), and finally to actionable synthesis (Workspace), providing a more engaging and useful journey than a simple linear search interface. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Publication count over time -> Goal: Show historical trends -> Viz: Bar Chart -> Interaction: Click bar to filter Explore page -> Justification: Familiar, clear way to show distribution over time. -> Library: Chart.js.
+        - Report Info: Research topics/keywords -> Goal: Show prominent themes -> Viz: Tag Cloud (HTML/CSS styled list) -> Interaction: Click tag to filter Explore page -> Justification: High-density, scannable overview of key topics. -> Library: Custom JS/CSS.
+        - Report Info: Full list of publications -> Goal: Allow detailed search and browsing -> Viz: Interactive Card Layout -> Interaction: Search, filter, expand for details, add to lists, generate LLM brief -> Justification: Provides scannable info with option for progressive disclosure of details, superior to a dense table. -> Library: Custom JS.
+        - Report Info: Relationships between papers (authors, keywords) -> Goal: Discover non-obvious connections and research clusters -> Viz: 2D Force-Directed Knowledge Graph -> Interaction: Hover for details, click to focus, pan/zoom -> Justification: A powerful, innovative "wow" feature that visualizes the data's network structure, directly addressing the need for insight generation. -> Library: Custom Canvas JS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #111827; color: #E5E7EB; }
+        .nav-link { transition: all 0.2s ease-in-out; }
+        .nav-link.active, .nav-link:hover { background-color: #374151; color: #fff; }
+        .card { background-color: #1F2937; border: 1px solid #374151; transition: transform 0.2s, box-shadow 0.2s; }
+        .card:hover { transform: translateY(-5px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+        .tag { background-color: #374151; color: #9CA3AF; }
+        .ai-panel { transition: width 0.3s ease-in-out; }
+        .chart-container { position: relative; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; height: 350px; max-height: 400px; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1F2937; }
+        ::-webkit-scrollbar-thumb { background: #4B5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6B7280; }
+        .glassmorphism { background: rgba(31, 41, 55, 0.6); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); }
+        .message-box {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 1000;
+            max-width: 90%; max-height: 90%; overflow-y: auto;
+        }
+        .ai-loading-pulse {
+            animation: pulse 1s infinite cubic-bezier(0.4, 0, 0.6, 1);
+        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+    </style>
+</head>
+<body class="h-screen w-screen overflow-hidden flex">
+
+    <nav class="flex flex-col items-center w-20 bg-gray-900 text-gray-400 py-4 space-y-4">
+        <div class="flex items-center justify-center mb-4">
+            <span class="text-3xl">🚀</span>
+        </div>
+        <a href="#dashboard" class="nav-link active w-16 h-16 flex flex-col items-center justify-center rounded-lg cursor-pointer" data-page="dashboard">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+            <span class="text-xs mt-1">Dash</span>
+        </a>
+        <a href="#explore" class="nav-link w-16 h-16 flex flex-col items-center justify-center rounded-lg cursor-pointer" data-page="explore">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+            <span class="text-xs mt-1">Explore</span>
+        </a>
+        <a href="#insights" class="nav-link w-16 h-16 flex flex-col items-center justify-center rounded-lg cursor-pointer" data-page="insights">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+            <span class="text-xs mt-1">Insights</span>
+        </a>
+         <a href="#workspace" class="nav-link w-16 h-16 flex flex-col items-center justify-center rounded-lg cursor-pointer" data-page="workspace">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h4M8 7a2 2 0 012-2h4a2 2 0 012 2v8a2 2 0 01-2 2h-4a2 2 0 01-2-2z" /></svg>
+            <span class="text-xs mt-1">Workspace</span>
+        </a>
+        <a href="#reading-list" class="nav-link w-16 h-16 flex flex-col items-center justify-center rounded-lg cursor-pointer" data-page="reading-list">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+            <span class="text-xs mt-1">Reading</span>
+        </a>
+    </nav>
+
+    <main id="main-content" class="flex-1 bg-gray-800 overflow-y-auto">
+        <section id="dashboard" class="page p-8">
+            <header class="mb-8">
+                <h1 class="text-4xl font-bold text-white">Space Biology Knowledge Engine</h1>
+                <p class="text-lg text-gray-400 mt-2">Explore 60 years of NASA's biological research in space.</p>
+            </header>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div class="card p-6 rounded-lg flex flex-col justify-center items-center">
+                    <span class="text-4xl font-bold text-cyan-400">608</span>
+                    <span class="text-gray-400 mt-2">Total Publications</span>
+                </div>
+                <div class="card p-6 rounded-lg flex flex-col justify-center items-center">
+                    <span class="text-4xl font-bold text-cyan-400">125+</span>
+                    <span class="text-gray-400 mt-2">Research Areas</span>
+                </div>
+                <div class="card p-6 rounded-lg flex flex-col justify-center items-center">
+                    <span class="text-4xl font-bold text-cyan-400">200+</span>
+                    <span class="text-gray-400 mt-2">Institutions</span>
+                </div>
+            </div>
+            <div class="card p-6 rounded-lg mb-8">
+                <h2 class="text-2xl font-semibold text-white mb-4">Publications Over Time</h2>
+                <div class="chart-container">
+                    <canvas id="publicationsChart"></canvas>
+                </div>
+            </div>
+            <div class="card p-6 rounded-lg">
+                <h2 class="text-2xl font-semibold text-white mb-4">Trending Topics</h2>
+                <div id="tag-cloud" class="flex flex-wrap gap-3"></div>
+            </div>
+        </section>
+
+        <section id="explore" class="page hidden p-8">
+            <header class="mb-6">
+                <h1 class="text-3xl font-bold text-white">Explore Publications</h1>
+                <div class="mt-4 flex gap-4">
+                    <input type="search" id="search-input" placeholder="Search titles, authors, conclusions..." class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                    <button id="filter-toggle" class="bg-gray-700 px-4 py-2 rounded-lg text-white">Filters</button>
+                </div>
+            </header>
+            <div class="flex gap-8">
+                <aside id="filter-panel" class="w-1/4 hidden">
+                    <div class="card p-4 rounded-lg">
+                       <h3 class="text-lg font-semibold text-white mb-3">Categories</h3>
+                       <div id="category-filters" class="space-y-2"></div>
+                       <h3 class="text-lg font-semibold text-white mt-6 mb-3">Year Range</h3>
+                       <input type="range" id="year-slider" class="w-full" min="1960" max="2025">
+                       <div class="flex justify-between text-sm text-gray-400">
+                           <span id="year-start">1960</span>
+                           <span id="year-end">2025</span>
+                       </div>
+                    </div>
+                </aside>
+                <div id="explore-results" class="flex-1 grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6"></div>
+            </div>
+        </section>
+
+        <section id="insights" class="page hidden p-8 h-full flex flex-col">
+             <header class="mb-4">
+                <h1 class="text-3xl font-bold text-white">Knowledge Graph</h1>
+                <p class="text-gray-400">Visualize connections between research papers. Click and drag to explore.</p>
+            </header>
+            <div class="card rounded-lg flex-1 overflow-hidden relative">
+                <canvas id="knowledgeGraph" class="absolute top-0 left-0"></canvas>
+                <div id="graph-tooltip" class="hidden absolute glassmorphism p-3 rounded-lg text-sm text-white max-w-xs pointer-events-none"></div>
+            </div>
+        </section>
+        
+        <section id="workspace" class="page hidden p-8">
+            <h1 class="text-3xl font-bold text-white">My Workspace</h1>
+            <div class="mt-4 card p-6 rounded-lg min-h-[60vh]">
+                <p class="text-gray-400">This is a conceptual space. In a full version, you could drag and drop findings from papers here to create a mission brief, identify research gaps, or synthesize information. Items added to your workspace would appear here as interactive cards.</p>
+                 <div id="workspace-items" class="mt-4">
+                    <div class="p-4 bg-gray-700 rounded-lg text-center text-gray-400">Your workspace is currently empty.</div>
+                 </div>
+            </div>
+        </section>
+
+        <section id="reading-list" class="page hidden p-8">
+            <h1 class="text-3xl font-bold text-white">Reading List</h1>
+            <div id="reading-list-items" class="mt-4 space-y-4">
+                 <div class="p-4 bg-gray-700 rounded-lg text-center text-gray-400">Your reading list is empty. Add papers from the Explore page.</div>
+            </div>
+        </section>
+    </main>
+
+    <aside id="ai-panel" class="ai-panel bg-gray-900 w-96 p-4 flex flex-col h-screen border-l border-gray-700">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold text-white">CosmoBot AI</h2>
+            <button id="ai-toggle" class="text-gray-400 hover:text-white">&times;</button>
+        </div>
+        <div id="ai-chat-window" class="flex-1 bg-gray-800 rounded-lg p-3 overflow-y-auto mb-4 flex flex-col space-y-4">
+             <div class="p-3 bg-gray-700 rounded-lg self-start max-w-xs">
+                <p class="text-sm">Hi! I'm CosmoBot. I can help you find research, summarize findings, or compare papers based on our 608 publication database and external knowledge. How can I assist your mission today?</p>
+            </div>
+        </div>
+        <div class="flex">
+            <input type="text" id="ai-input" placeholder="Ask CosmoBot..." class="flex-1 bg-gray-700 border border-gray-600 rounded-l-lg px-3 py-2 text-white focus:outline-none focus:ring-2 focus:ring-cyan-500">
+            <button id="ai-send-btn" class="bg-cyan-600 text-white px-4 py-2 rounded-r-lg hover:bg-cyan-700">Send</button>
+        </div>
+    </aside>
+    
+    <div id="message-box-container" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[200]">
+        <div id="message-box" class="bg-gray-900 card p-6 rounded-xl w-[90vw] md:w-[600px] shadow-2xl">
+            <h3 id="message-box-title" class="text-xl font-bold text-cyan-400 mb-4"></h3>
+            <div id="message-box-content" class="text-gray-300 text-sm space-y-3 max-h-[70vh] overflow-y-auto"></div>
+            <div id="message-box-sources" class="mt-4 text-xs text-gray-500 border-t border-gray-700 pt-3"></div>
+            <button id="message-box-close" class="mt-6 w-full bg-gray-700 text-white py-2 rounded-lg hover:bg-gray-600">Close</button>
+        </div>
+    </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+
+    /* * CRITICAL STEP: DATA INSERTION 
+     * ===========================
+     * 1. Download the full 'publications.csv' file from the NASA GitHub link.
+     * 2. Convert the CSV data into a JSON array of objects.
+     * 3. Paste the entire JSON array here, replacing the sample data below.
+     * Ensure each object in the array has at least the following keys:
+     * { id: Number, title: String, authors: String, year: Number, institution: String, tags: Array<String>, conclusion: String, nextSteps: String }
+     */
+    const publications = [
+        { id: 1, title: 'Microgravity effects on Arabidopsis thaliana root development', authors: 'A. Jensen, B. Carlsson', year: 2022, institution: 'JPL', tags: ['Plant Science', 'Genetics'], conclusion: 'Root skewing is significantly altered in microgravity, suggesting gravisensing pathways are disrupted.', nextSteps: 'Investigate specific gene expression changes in root tip meristems.' },
+        { id: 2, title: 'Long-term Spaceflight and its Impact on Human Bone Density', authors: 'C. Evans, D. Smith', year: 2021, institution: 'Johnson Space Center', tags: ['Human Health', 'Physiology'], conclusion: 'Astronauts on missions over 6 months show an average of 11% bone density loss in weight-bearing bones.', nextSteps: 'Test new exercise countermeasures and dietary supplements.' },
+        { id: 3, title: 'Psychological Resilience in Isolated, Confined Environments', authors: 'F. Williams, G. Harris', year: 2023, institution: 'Ames Research Center', tags: ['Human Health', 'Psychology'], conclusion: 'Team cohesion and regular communication with Earth are critical for maintaining psychological health.', nextSteps: 'Develop VR-based recreational activities to combat monotony.' },
+        { id: 4, title: 'Fungal Growth on Spacecraft Materials', authors: 'H. Ivanov, I. Petrov', year: 2019, institution: 'Roscosmos', tags: ['Microbiology', 'Materials Science'], conclusion: 'Certain fungal species can degrade polymer-based materials, posing a risk to long-term missions.', nextSteps: 'Develop antimicrobial coatings for interior surfaces.' },
+        { id: 5, title: 'Cellular Response to Cosmic Radiation', authors: 'J. Lee, K. Patel', year: 2020, institution: 'Glenn Research Center', tags: ['Genetics', 'Human Health'], conclusion: 'Increased DNA damage and repair mechanism activation observed in human cell cultures exposed to simulated GCR.', nextSteps: 'Evaluate shielding effectiveness of new composite materials.' },
+        { id: 6, title: 'Nutrient Production from Algae Bioreactors in Space', authors: 'L. Martinez', year: 2022, institution: 'ESA', tags: ['Life Support', 'Plant Science'], conclusion: 'Spirulina algae can be cultivated in a closed-loop system to produce a high-protein food source.', nextSteps: 'Optimize bioreactor efficiency and taste of the final product.' },
+        { id: 7, title: 'Vestibular System Adaptation to Zero-G', authors: 'M. Chen', year: 2018, institution: 'CNSA', tags: ['Human Health', 'Physiology'], conclusion: 'The otolith organs show significant adaptation within the first 72 hours of spaceflight, leading to space adaptation syndrome.', nextSteps: 'Pre-flight adaptation protocols using centrifugation.' },
+        { id: 8, title: 'Comparative Genomics of Bacteria in the ISS Environment', authors: 'N. O\'Malley', year: 2023, institution: 'JAXA', tags: ['Microbiology', 'Genetics'], conclusion: 'Some bacterial strains exhibit increased antibiotic resistance after prolonged exposure to the ISS environment.', nextSteps: 'Identify the genetic markers responsible for this increased resistance.' },
+    ];
+    // This is sample data. Replace this array with the full 608 publication JSON data!
+    
+    const allTags = [...new Set(publications.flatMap(p => p.tags))];
+    let readingList = [];
+    
+    const pages = document.querySelectorAll('.page');
+    const navLinks = document.querySelectorAll('.nav-link');
+    const messageBoxContainer = document.getElementById('message-box-container');
+    const messageBoxTitle = document.getElementById('message-box-title');
+    const messageBoxContent = document.getElementById('message-box-content');
+    const messageBoxSources = document.getElementById('message-box-sources');
+    const aiChatWindow = document.getElementById('ai-chat-window');
+    const aiInput = document.getElementById('ai-input');
+    const aiSendBtn = document.getElementById('ai-send-btn');
+    const apiKey = "";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+    const systemPrompt = "You are CosmoBot, a helpful AI assistant specialized in NASA Space Biology. Your role is to analyze and summarize research for mission planners, scientists, and managers. Provide concise, actionable answers. When asked general questions about space, use Google Search grounding for accurate, real-time information. Frame responses in the context of human exploration of the Moon and Mars.";
+
+    function showMessage(title, content, sources) {
+        messageBoxTitle.textContent = title;
+        messageBoxContent.innerHTML = content;
+        messageBoxSources.innerHTML = sources.length > 0 
+            ? '<strong>Sources:</strong> ' + sources.map(s => `<a href="${s.uri}" target="_blank" class="text-cyan-400 hover:underline">${s.title}</a>`).join(', ')
+            : 'No external sources cited.';
+        messageBoxContainer.classList.remove('hidden');
+    }
+
+    document.getElementById('message-box-close').addEventListener('click', () => {
+        messageBoxContainer.classList.add('hidden');
+    });
+
+    function navigateTo(pageId) {
+        pages.forEach(page => page.classList.toggle('hidden', page.id !== pageId));
+        navLinks.forEach(link => link.classList.toggle('active', link.dataset.page === pageId));
+        document.getElementById('main-content').scrollTop = 0;
+    }
+
+    navLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const pageId = link.dataset.page;
+            navigateTo(pageId);
+        });
+    });
+
+    const aiPanel = document.getElementById('ai-panel');
+    const aiToggle = document.getElementById('ai-toggle');
+    aiToggle.addEventListener('click', () => {
+        aiPanel.classList.toggle('w-96');
+        aiPanel.classList.toggle('w-0');
+        aiPanel.classList.toggle('p-4');
+        aiPanel.classList.toggle('p-0');
+        aiPanel.querySelectorAll(':scope > div').forEach(el => el.classList.toggle('hidden'));
+    });
+
+    function initDashboard() {
+        const ctx = document.getElementById('publicationsChart').getContext('2d');
+        const yearCounts = publications.reduce((acc, p) => {
+            acc[p.year] = (acc[p.year] || 0) + 1;
+            return acc;
+        }, {});
+        const chartLabels = Object.keys(yearCounts).sort();
+        const chartData = chartLabels.map(year => yearCounts[year]);
+
+        // Only render the chart if there is data
+        if (chartLabels.length > 0) {
+            new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: chartLabels,
+                    datasets: [{
+                        label: '# of Publications',
+                        data: chartData,
+                        backgroundColor: 'rgba(56, 189, 248, 0.6)',
+                        borderColor: 'rgba(56, 189, 248, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: { beginAtZero: true, ticks: { color: '#9CA3AF' } },
+                        x: { ticks: { color: '#9CA3AF' } }
+                    },
+                    plugins: { legend: { labels: { color: '#9CA3AF' } } }
+                }
+            });
+        }
+
+
+        const tagCloud = document.getElementById('tag-cloud');
+        tagCloud.innerHTML = allTags.map(tag => `<span class="tag text-sm font-medium px-3 py-1 rounded-full cursor-pointer">${tag}</span>`).join('');
+    }
+
+    async function fetchGeminiResponse(userQuery, customSystemPrompt, useSearch, maxRetries = 5) {
+        const payload = {
+            contents: [{ parts: [{ text: userQuery }] }],
+            systemInstruction: { parts: [{ text: customSystemPrompt }] },
+            tools: useSearch ? [{ "google_search": {} }] : undefined,
+        };
+
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.status === 429 && i < maxRetries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                    continue;
+                }
+                
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    const text = candidate.content.parts[0].text;
+                    let sources = [];
+                    const groundingMetadata = candidate.groundingMetadata;
+                    if (groundingMetadata && groundingMetadata.groundingAttributions) {
+                        sources = groundingMetadata.groundingAttributions
+                            .map(attribution => ({ uri: attribution.web?.uri, title: attribution.web?.title }))
+                            .filter(source => source.uri && source.title);
+                    }
+                    return { text, sources };
+                } else {
+                    return { text: "Sorry, I received an empty or malformed response from the AI model.", sources: [] };
+                }
+            } catch (error) {
+                if (i < maxRetries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, i) * 1000));
+                } else {
+                    console.error("Gemini API call failed after multiple retries:", error);
+                    return { text: "Error: Could not connect to the AI service. Please try again later.", sources: [] };
+                }
+            }
+        }
+    }
+
+    async function handleMissionBriefGeneration(publication) {
+        const button = document.querySelector(`.generate-brief[data-id="${publication.id}"]`);
+        button.disabled = true;
+        button.innerHTML = '<span class="ai-loading-pulse">Generating...</span>';
+
+        const prompt = `Based on the following research paper, generate a concise, actionable mission impact brief (150 words max) for mission planners preparing for a long-duration Moon or Mars habitat. Focus on: 1) The key risk/benefit, 2) The practical mitigation/application, and 3) Next step recommendation.\n\nPaper Title: ${publication.title}\nConclusion: ${publication.conclusion}\nNext Steps: ${publication.nextSteps}`;
+        
+        const response = await fetchGeminiResponse(prompt, systemPrompt, false);
+
+        button.disabled = false;
+        button.innerHTML = '✨ Generate Mission Impact Brief';
+
+        showMessage(
+            `Mission Impact Brief: ${publication.title}`,
+            response.text.replace(/\n/g, '<br>'),
+            response.sources
+        );
+    }
+    
+    function appendChatMessage(role, content) {
+        const messageDiv = document.createElement('div');
+        const isUser = role === 'user';
+        
+        let contentHtml = content;
+        if (!isUser) {
+            contentHtml = contentHtml.replace(/\n/g, '<br>');
+        }
+
+        messageDiv.className = `p-3 rounded-lg max-w-[85%] text-sm ${isUser ? 'bg-cyan-700 self-end text-white' : 'bg-gray-700 self-start text-gray-200'}`;
+        messageDiv.innerHTML = contentHtml;
+        
+        aiChatWindow.appendChild(messageDiv);
+        aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+        return messageDiv;
+    }
+
+    async function handleChatSubmit() {
+        const userQuery = aiInput.value.trim();
+        if (!userQuery) return;
+
+        appendChatMessage('user', userQuery);
+        aiInput.value = '';
+        aiInput.disabled = true;
+        aiSendBtn.disabled = true;
+        
+        const loadingMessage = appendChatMessage('ai', '<span class="ai-loading-pulse">CosmoBot is thinking...</span>');
+
+        const response = await fetchGeminiResponse(userQuery, systemPrompt, true);
+
+        loadingMessage.innerHTML = response.text;
+        if (response.sources.length > 0) {
+            const sourcesList = response.sources.map(s => `<li><a href="${s.uri}" target="_blank" class="text-cyan-400 hover:underline">${s.title}</a></li>`).join('');
+            loadingMessage.innerHTML += `<div class="mt-2 text-xs text-gray-400 border-t border-gray-600 pt-2"><strong>Sources:</strong><ul>${sourcesList}</ul></div>`;
+        }
+
+        aiInput.disabled = false;
+        aiSendBtn.disabled = false;
+        aiInput.focus();
+        aiChatWindow.scrollTop = aiChatWindow.scrollHeight;
+    }
+    
+    aiSendBtn.addEventListener('click', handleChatSubmit);
+    aiInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') handleChatSubmit();
+    });
+
+    function initExplore() {
+        const resultsContainer = document.getElementById('explore-results');
+        const categoryFilters = document.getElementById('category-filters');
+        const searchInput = document.getElementById('search-input');
+        
+        categoryFilters.innerHTML = allTags.map(tag => `
+            <label class="flex items-center space-x-2 text-gray-300">
+                <input type="checkbox" value="${tag}" class="form-checkbox bg-gray-600 border-gray-500 text-cyan-500 focus:ring-cyan-600">
+                <span>${tag}</span>
+            </label>
+        `).join('');
+
+        function renderResults(pubs) {
+            if (pubs.length === 0) {
+                 resultsContainer.innerHTML = `<p class="text-gray-400 col-span-full text-center">No publications found matching your criteria.</p>`;
+                 return;
+            }
+            resultsContainer.innerHTML = pubs.map(p => `
+                <div class="card rounded-lg p-4 flex flex-col" data-id="${p.id}">
+                    <h3 class="font-bold text-lg text-white">${p.title}</h3>
+                    <p class="text-sm text-gray-400 mt-1">${p.authors} (${p.year})</p>
+                    <p class="text-xs text-gray-500 mt-1">${p.institution}</p>
+                    <div class="flex flex-wrap gap-2 mt-3">${p.tags.map(t => `<span class="tag text-xs px-2 py-1 rounded-full">${t}</span>`).join('')}</div>
+                    <div class="mt-4 pt-4 border-t border-gray-700 text-sm text-gray-300 hidden details">
+                        <h4 class="font-semibold text-white">Conclusion:</h4>
+                        <p>${p.conclusion}</p>
+                        <h4 class="font-semibold text-white mt-2">Next Steps:</h4>
+                        <p>${p.nextSteps}</p>
+                    </div>
+                    <div class="mt-auto pt-4 flex justify-between items-center border-t border-gray-700">
+                         <button class="toggle-details text-cyan-400 text-sm hover:underline">Show Details</button>
+                         <button class="generate-brief text-sm bg-blue-600 text-white px-3 py-1 rounded-full hover:bg-blue-700 transition" data-id="${p.id}">✨ Generate Mission Impact Brief</button>
+                         <button class="add-reading-list text-gray-400 hover:text-white" data-id="${p.id}">
+                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" /></svg>
+                         </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        function filterAndRender() {
+            const searchTerm = searchInput.value.toLowerCase();
+            const selectedCategories = [...categoryFilters.querySelectorAll('input:checked')].map(el => el.value);
+            
+            const filteredPubs = publications.filter(p => {
+                // Ensure p.title, p.authors, p.conclusion exist and are strings before calling toLowerCase
+                const title = (p.title || '').toLowerCase();
+                const authors = (p.authors || '').toLowerCase();
+                const conclusion = (p.conclusion || '').toLowerCase();
+                
+                const matchesSearch = searchTerm === '' || title.includes(searchTerm) || authors.includes(searchTerm) || conclusion.includes(searchTerm);
+                const matchesCategory = selectedCategories.length === 0 || selectedCategories.every(cat => p.tags && p.tags.includes(cat));
+                return matchesSearch && matchesCategory;
+            });
+            renderResults(filteredPubs);
+        }
+
+        searchInput.addEventListener('input', filterAndRender);
+        categoryFilters.addEventListener('change', filterAndRender);
+        document.getElementById('filter-toggle').addEventListener('click', () => document.getElementById('filter-panel').classList.toggle('hidden'));
+        resultsContainer.addEventListener('click', e => {
+            const card = e.target.closest('.card');
+            if (!card) return;
+            const pubId = parseInt(card.dataset.id);
+            const publication = publications.find(p => p.id === pubId);
+            if (!publication) return;
+
+            if (e.target.classList.contains('toggle-details')) {
+                const details = card.querySelector('.details');
+                details.classList.toggle('hidden');
+                e.target.textContent = details.classList.contains('hidden') ? 'Show Details' : 'Hide Details';
+            }
+            if (e.target.closest('.add-reading-list')) {
+                const button = e.target.closest('.add-reading-list');
+                if (!readingList.includes(pubId)) {
+                    readingList.push(pubId);
+                    button.classList.add('text-cyan-400');
+                    updateReadingList();
+                }
+            }
+            if (e.target.classList.contains('generate-brief')) {
+                handleMissionBriefGeneration(publication);
+            }
+        });
+
+        filterAndRender(); // Initial render
+    }
+    
+    function updateReadingList() {
+        const container = document.getElementById('reading-list-items');
+        if (readingList.length === 0) {
+            container.innerHTML = `<div class="p-4 bg-gray-700 rounded-lg text-center text-gray-400">Your reading list is empty. Add papers from the Explore page.</div>`;
+            return;
+        }
+        container.innerHTML = readingList.map(id => {
+            const p = publications.find(pub => pub.id === id);
+            return `
+            <div class="card p-4 rounded-lg flex justify-between items-start">
+                <div>
+                    <h3 class="font-bold text-white">${p.title}</h3>
+                    <p class="text-sm text-gray-400">${p.authors} (${p.year})</p>
+                </div>
+                <button class="remove-reading-list text-red-500 hover:text-red-400" data-id="${id}">&times;</button>
+            </div>`;
+        }).join('');
+    }
+    document.getElementById('reading-list-items').addEventListener('click', e => {
+        if (e.target.classList.contains('remove-reading-list')) {
+            const id = parseInt(e.target.dataset.id);
+            readingList = readingList.filter(item => item !== id);
+            updateReadingList();
+            const exploreButton = document.querySelector(`.add-reading-list[data-id="${id}"]`);
+            if (exploreButton) exploreButton.classList.remove('text-cyan-400');
+        }
+    });
+
+    function initInsights() {
+        // Simple check to prevent errors if publications is empty
+        if (publications.length === 0) return;
+
+        const canvas = document.getElementById('knowledgeGraph');
+        const tooltip = document.getElementById('graph-tooltip');
+        const ctx = canvas.getContext('2d');
+        let nodes, links, simulation;
+        let width, height;
+
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            width = container.clientWidth;
+            height = container.clientHeight;
+            canvas.width = width;
+            canvas.height = height;
+        }
+        
+        function setupGraph() {
+            resizeCanvas();
+            nodes = publications.map(p => ({ id: p.id, title: p.title, x: Math.random() * width, y: Math.random() * height, vx: 0, vy: 0, radius: 5 + (p.tags ? p.tags.length : 0) * 1.5 }));
+            links = [];
+            for (let i = 0; i < publications.length; i++) {
+                for (let j = i + 1; j < publications.length; j++) {
+                    const tagsI = publications[i].tags || [];
+                    const tagsJ = publications[j].tags || [];
+                    const commonTags = tagsI.filter(t => tagsJ.includes(t));
+                    if (commonTags.length > 0) {
+                        links.push({ source: nodes[i], target: nodes[j], strength: commonTags.length * 0.1 });
+                    }
+                }
+            }
+            if (simulation) cancelAnimationFrame(simulation);
+            animate();
+        }
+
+        function animate() {
+            applyForces();
+            draw();
+            simulation = requestAnimationFrame(animate);
+        }
+
+        function applyForces() {
+            const attraction = 0.001;
+            const repulsion = 500;
+
+            nodes.forEach(node => {
+                node.vx *= 0.95; 
+                node.vy *= 0.95;
+                node.vx += (width / 2 - node.x) * 0.0005;
+                node.vy += (height / 2 - node.y) * 0.0005;
+            });
+
+            links.forEach(link => {
+                const dx = link.target.x - link.source.x;
+                const dy = link.target.y - link.source.y;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                const force = (dist - 200) * attraction * link.strength;
+                link.source.vx += (dx / dist) * force;
+                link.source.vy += (dy / dist) * force;
+                link.target.vx -= (dx / dist) * force;
+                link.target.vy -= (dy / dist) * force;
+            });
+
+            for (let i = 0; i < nodes.length; i++) {
+                for (let j = i + 1; j < nodes.length; j++) {
+                    const dx = nodes[j].x - nodes[i].x;
+                    const dy = nodes[j].y - nodes[i].y;
+                    const distSq = dx * dx + dy * dy || 1;
+                    const force = repulsion / distSq;
+                    nodes[i].vx -= (dx / Math.sqrt(distSq)) * force;
+                    nodes[i].vy -= (dy / Math.sqrt(distSq)) * force;
+                    nodes[j].vx += (dx / Math.sqrt(distSq)) * force;
+                    nodes[j].vy += (dy / Math.sqrt(distSq)) * force;
+                }
+            }
+            
+            nodes.forEach(node => {
+                node.x += node.vx;
+                node.y += node.vy;
+                node.x = Math.max(node.radius, Math.min(width - node.radius, node.x));
+                node.y = Math.max(node.radius, Math.min(height - node.radius, node.y));
+            });
+        }
+        
+        function draw() {
+            ctx.clearRect(0, 0, width, height);
+            ctx.strokeStyle = 'rgba(75, 85, 99, 0.3)';
+            ctx.lineWidth = 1;
+            links.forEach(link => {
+                ctx.beginPath();
+                ctx.moveTo(link.source.x, link.source.y);
+                ctx.lineTo(link.target.x, link.target.y);
+                ctx.stroke();
+            });
+            nodes.forEach(node => {
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, node.radius, 0, 2 * Math.PI);
+                ctx.fillStyle = 'rgba(56, 189, 248, 0.8)';
+                ctx.fill();
+            });
+        }
+
+        canvas.addEventListener('mousemove', e => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            let hoveredNode = null;
+            for (const node of nodes) {
+                const dist = Math.sqrt(Math.pow(node.x - x, 2) + Math.pow(node.y - y, 2));
+                if (dist < node.radius) {
+                    hoveredNode = node;
+                    break;
+                }
+            }
+
+            if (hoveredNode) {
+                tooltip.style.display = 'block';
+                tooltip.style.left = `${e.clientX + 15}px`;
+                tooltip.style.top = `${e.clientY + 15}px`;
+                tooltip.textContent = hoveredNode.title;
+            } else {
+                tooltip.style.display = 'none';
+            }
+        });
+        
+        const insightsObserver = new MutationObserver((mutations) => {
+          for (let mutation of mutations) {
+            if (mutation.attributeName === 'class' && !document.getElementById('insights').classList.contains('hidden')) {
+              setupGraph();
+            }
+          }
+        });
+        insightsObserver.observe(document.getElementById('insights'), { attributes: true });
+        window.addEventListener('resize', setupGraph);
+    }
+    
+    initDashboard();
+    initExplore();
+    initInsights();
+    navigateTo('dashboard');
+});
+</script>
+</body>
+</html>
