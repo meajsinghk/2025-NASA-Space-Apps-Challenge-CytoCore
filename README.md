@@ -4,6 +4,8 @@
 
 BioCosmos is an interactive web application designed to unlock the vast knowledge within NASA's space bioscience research. It transforms a dataset of over 600 publications into a dynamic and explorable knowledge engine. The platform addresses the challenge by providing multiple intuitive interfaces—an interactive dashboard for high-level trends, a powerful search and filter tool for deep dives, and an innovative knowledge graph for discovering hidden connections between studies. By organizing and visualizing decades of research, BioCosmos makes this critical information accessible to scientists, mission planners, and students, accelerating future discoveries and supporting safer human exploration of space. It's important because it turns a static library of information into an actionable tool for insight and discovery, empowering the next generation of space exploration.
 
+##[DEMO Link](https://www.loom.com/share/35308c9f2b3c4002802c459661a19077?sid=9fa8e254-7d7e-4710-bed1-42b050b5d4d6)
+
 ## Project Details
 
 ### What does it do and how does it work?
